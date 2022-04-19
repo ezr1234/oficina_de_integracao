@@ -12,8 +12,9 @@
 #include <esp_now.h>
 #include <WiFi.h>
 
-// Structure example to receive data
-// Must match the sender structure
+int LED0 = 27;
+int LED1 = 32;
+
 typedef struct struct_message
 {
   int btn;
@@ -21,6 +22,18 @@ typedef struct struct_message
 
 // Create a struct_message called myData
 struct_message myData;
+
+void switchLED(int pin)
+{
+  if (digitalRead(pin) == HIGH)
+  {
+    digitalWrite(pin, LOW);
+  }
+  else
+  {
+    digitalWrite(pin, HIGH);
+  }
+}
 
 // callback function that will be executed when data is received
 void OnDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len)
@@ -30,6 +43,16 @@ void OnDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len)
   Serial.println(len);
   Serial.print("Btn: ");
   Serial.println(myData.btn);
+
+  switch (myData.btn)
+  {
+  case 0:
+    switchLED(LED0);
+    break;
+  case 1:
+    switchLED(LED1);
+    break;
+  }
 
   /*   for (int i = 0; i < 6; i++)
     {
@@ -41,6 +64,8 @@ void setup()
 {
   // Initialize Serial Monitor
   Serial.begin(115200);
+  pinMode(LED0, OUTPUT);
+  pinMode(LED1, OUTPUT);
 
   // Set device as a Wi-Fi Station
   WiFi.mode(WIFI_STA);
