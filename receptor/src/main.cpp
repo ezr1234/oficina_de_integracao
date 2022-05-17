@@ -1,87 +1,107 @@
-/*
-  Rui Santos
-  Complete project details at https://RandomNerdTutorials.com/esp-now-esp32-arduino-ide/
-
-  Permission is hereby granted, free of charge, to any person obtaining a copy
-  of this software and associated documentation files.
-
-  The above copyright notice and this permission notice shall be included in all
-  copies or substantial portions of the Software.
-*/
-
-#include <esp_now.h>
+#include <Arduino.h>
 #include <WiFi.h>
+#include "EspNow2MqttGateway.hpp"
+#include <WiFi.h>
+#include <WiFiClient.h>
+#include "secrets.h"
+#include "ArduinoJson.h"
 
-int LED0 = 27;
-int LED1 = 32;
+// shared criptokey, must be the same in all devices. create your own
+DynamicJsonDocument doc(512);
+byte sharedKey[16] = {10, 200, 23, 4, 50, 3, 99, 82, 39, 100, 211, 112, 143, 4, 15, 106};
+byte sharedChannel = 3; // avoid your wifi channel
+// gateway creation, needs initialization at setup, but after init mqtt
+WiFiClient wifiClient;
+EspNow2MqttGateway gw = EspNow2MqttGateway(sharedKey, wifiClient, MQTT_SERVER_IP, 1883, sharedChannel, "gardenGW");
 
-typedef struct struct_message
+void setupWiFi(const char *ssid, const char *password)
 {
-  int btn;
-} struct_message;
-
-// Create a struct_message called myData
-struct_message myData;
-
-void switchLED(int pin)
-{
-  if (digitalRead(pin) == HIGH)
-  {
-    digitalWrite(pin, LOW);
+  WiFi.mode(WIFI_MODE_STA);
+  WiFi.setSleep(false);
+  WiFi.begin(ssid, password, sharedChannel);
+  while (WiFi.status() != WL_CONNECTED)
+  { // Wait for the Wi-Fi to connect
+    delay(100);
+    Serial.println("Tentando conectar ao wifi...");
   }
-  else
-  {
-    digitalWrite(pin, HIGH);
-  }
+  Serial.println("Conectado ao wifi!");
+  /*
+   */
+  String ipMsg = String("ip ");
+  ipMsg.concat(WiFi.localIP().toString());
+  ipMsg.concat(" ch ");
+  ipMsg.concat(String((int)WiFi.channel()));
+  Serial.println(ipMsg.c_str());
 }
 
-// callback function that will be executed when data is received
-void OnDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len)
+void displayRequestAndResponse(bool ack, request &rq, response &rsp)
 {
-  memcpy(&myData, incomingData, sizeof(myData));
-  Serial.print("Bytes received: ");
-  Serial.println(len);
-  Serial.print("Btn: ");
-  Serial.println(myData.btn);
-
-  switch (myData.btn)
+  char line[13];
+  for (int opCount = 0; opCount < rq.operations_count; opCount++)
   {
-  case 0:
-    switchLED(LED0);
-    break;
-  case 1:
-    switchLED(LED1);
-    break;
-  }
-
-  /*   for (int i = 0; i < 6; i++)
+    switch (rq.operations[opCount].which_op)
     {
-      Serial.println(mac[i]);
-    } */
+    case request_Operation_ping_tag:
+      snprintf(line, sizeof(line), "ping: %d", rq.operations[opCount].op.ping.num);
+      break;
+    case request_Operation_send_tag:
+      snprintf(line, sizeof(line), "send: %s", rq.operations[opCount].op.send.queue);
+      break;
+    case request_Operation_qRequest_tag:
+      snprintf(line, sizeof(line), "ask: %s", rq.operations[opCount].op.qRequest.queue);
+      break;
+    default:
+      snprintf(line, sizeof(line), "unknown op");
+      break;
+    }
+    Serial.println(line);
+  }
+  snprintf(line, sizeof(line), "%s: %d ops",
+           rq.client_id,
+           rq.operations_count);
+  Serial.println(line);
+  String ipMsg = String("ip ");
+  ipMsg.concat(WiFi.localIP().toString());
+  ipMsg.concat(" ch ");
+  ipMsg.concat(String((int)WiFi.channel()));
+  Serial.println(ipMsg.c_str());
+}
+
+void displayMyMac()
+{
+  char macStr[22];
+  strcpy(macStr, "Mac ");
+  strcat(macStr, WiFi.macAddress().c_str());
+  Serial.print("My mac: ");
+  Serial.println(macStr);
+}
+
+void onEspNowRecv(const uint8_t *mac_addr, const uint8_t *incomingData, int len)
+{
+  char macStr[18 + 1 + 4]; // 18 mac + 1 space + 3 len
+  Serial.print("Packet received from: ");
+  snprintf(macStr, sizeof(macStr), "%02x:%02x:%02x:%02x:%02x:%02x",
+           mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]);
+  Serial.println(macStr);
 }
 
 void setup()
 {
-  // Initialize Serial Monitor
   Serial.begin(115200);
-  pinMode(LED0, OUTPUT);
-  pinMode(LED1, OUTPUT);
+  displayMyMac();
 
-  // Set device as a Wi-Fi Station
-  WiFi.mode(WIFI_STA);
+  setupWiFi(WIFI_SSID, WIFI_PASSWORD);
 
-  // Init ESP-NOW
-  if (esp_now_init() != ESP_OK)
-  {
-    Serial.println("Error initializing ESP-NOW");
-    return;
-  }
-
-  // Once ESPNow is successfully Init, we will register for recv CB to
-  // get recv packer info
-  esp_now_register_recv_cb(OnDataRecv);
+  // init gateway
+  gw.init();
+  gw.onProcessedRequest = displayRequestAndResponse;
+  gw.onDataReceived = onEspNowRecv;
+  EspNow2Mqtt_subscribe(); // FIXME: porque se tiene que llamar a esta función desde aqui??
 }
 
 void loop()
 {
+  // put your main code here, to run repeatedly:
+  delay(50);
+  gw.loop(); // required to fetch messages from mqtt
 }

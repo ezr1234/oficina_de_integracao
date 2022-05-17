@@ -1,93 +1,72 @@
-/*
-  Rui Santos
-  Complete project details at https://RandomNerdTutorials.com/esp-now-esp32-arduino-ide/
+/* example with LCD screen that sends single mesages*/
 
-  Permission is hereby granted, free of charge, to any person obtaining a copy
-  of this software and associated documentation files.
-
-  The above copyright notice and this permission notice shall be included in all
-  copies or substantial portions of the Software.
-*/
-
-#include <esp_now.h>
+#include <Arduino.h>
 #include <WiFi.h>
-
-// Mac do receptor = A4:CF:12:25:D9:8C
-uint8_t broadcastAddress[] = {0xA4, 0xCF, 0x12, 0x25, 0xD9, 0x8C};
+#include <esp_wifi.h>
+#include "EspNow2MqttClient.hpp"
 
 #define btn0 19
 #define btn1 23
 
-// Structure example to send data
-// Must match the receiver structure
-typedef struct struct_message
+byte sharedKey[16] = {10, 200, 23, 4, 50, 3, 99, 82, 39, 100, 211, 112, 143, 4, 15, 106};
+byte sharedChannel = 3;
+uint8_t gatewayMac[6] = {0xA4, 0xCF, 0x12, 0x25, 0xD9, 0x8C};
+EspNow2MqttClient client = EspNow2MqttClient("tstRq", sharedKey, gatewayMac, sharedChannel);
+
+void onDataSentUpdateDisplay(bool success)
 {
-  int btn;
-} struct_message;
+  Serial.println(success ? "Sucesso" : "Erro ao entregar");
+}
 
-// Create a struct_message called myData
-struct_message myData;
-
-esp_now_peer_info_t peerInfo;
-
-// callback when data is sent
-void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status)
+int32_t getWiFiChannel(const char *ssid)
 {
-  Serial.print("\r\nLast Packet Send Status:\t");
-  Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
+  if (int32_t n = WiFi.scanNetworks())
+  {
+    for (uint8_t i = 0; i < n; i++)
+    {
+      if (!strcmp(ssid, WiFi.SSID(i).c_str()))
+      {
+        return WiFi.channel(i);
+      }
+    }
+  }
+  return 0;
 }
 
 void setup()
 {
-
+  Serial.begin(115200);
   pinMode(btn0, INPUT_PULLUP);
   pinMode(btn1, INPUT_PULLUP);
-  // Init Serial Monitor
-  Serial.begin(115200);
+  Serial.println(WiFi.macAddress());
 
-  // Set device as a Wi-Fi Station
-  WiFi.mode(WIFI_STA);
-
-  // Init ESP-NOW
-  if (esp_now_init() != ESP_OK)
+  int initcode;
+  do
   {
-    Serial.println("Error initializing ESP-NOW");
-    return;
-  }
+    initcode = client.init();
+    switch (initcode)
+    {
+    case 1:
+      Serial.println("CANNOT INIT");
+      break;
+    case 2:
+      Serial.println("CANNOT PAIR");
+      break;
+    default:
+      Serial.println("PAIRED");
+      break;
+    }
+    delay(1001);
+  } while (initcode != 0);
 
-  // Once ESPNow is successfully Init, we will register for Send CB to
-  // get the status of Trasnmitted packet
-  esp_now_register_send_cb(OnDataSent);
-
-  // Register peer
-  memcpy(peerInfo.peer_addr, broadcastAddress, 6);
-  peerInfo.channel = 0;
-  peerInfo.encrypt = false;
-
-  // Add peer
-  if (esp_now_add_peer(&peerInfo) != ESP_OK)
-  {
-    Serial.println("Failed to add peer");
-    return;
-  }
+  client.onSentACK = onDataSentUpdateDisplay;
 }
 
-void sendBtn(int btn)
+void sendBtn(char btn)
 {
-  // Set values to send
-  myData.btn = btn;
-
   // Send message via ESP-NOW
-  esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *)&myData, sizeof(myData));
-
-  if (result == ESP_OK)
-  {
-    Serial.println("Sent with success");
-  }
-  else
-  {
-    Serial.println("Error sending the data");
-  }
+  // Get MAC address for WiFi station
+  client.doSend(&btn, "45768243");
   delay(200);
 }
 
@@ -95,10 +74,10 @@ void loop()
 {
   if (digitalRead(btn0) == LOW)
   {
-    sendBtn(0);
+    sendBtn('0');
   }
   if (digitalRead(btn1) == LOW)
   {
-    sendBtn(1);
+    sendBtn('1');
   }
 }
