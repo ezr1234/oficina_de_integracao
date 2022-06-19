@@ -91,11 +91,13 @@ void setup()
   displayMyMac();
 
   setupWiFi(WIFI_SSID, WIFI_PASSWORD);
-
+  pinMode(2, OUTPUT);
+  digitalWrite(2, HIGH);
   // init gateway
   gw.init();
   gw.onProcessedRequest = displayRequestAndResponse;
   gw.onDataReceived = onEspNowRecv;
+  gw.sendGwMqttMessage("oficina/hello", "It's alive!");
   EspNow2Mqtt_subscribe(); // FIXME: porque se tiene que llamar a esta función desde aqui??
 }
 

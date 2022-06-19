@@ -7,7 +7,7 @@
 
 #define btn0 19
 #define btn1 23
-#define touchBtn2 4
+#define btn3 4
 
 byte sharedKey[16] = {10, 200, 23, 4, 50, 3, 99, 82, 39, 100, 211, 112, 143, 4, 15, 106};
 byte sharedChannel = 3;
@@ -81,7 +81,7 @@ void loop()
   {
     sendBtn('1');
   }
-  if (touchRead(touchBtn2) < 20)
+  if (digitalRead(btn3) < 20)
   {
     sendBtn('2');
   }
