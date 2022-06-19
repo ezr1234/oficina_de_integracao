@@ -7,15 +7,27 @@
 
 #define btn0 19
 #define btn1 23
-#define btn3 4
+#define btn2 4
 
 byte sharedKey[16] = {10, 200, 23, 4, 50, 3, 99, 82, 39, 100, 211, 112, 143, 4, 15, 106};
 byte sharedChannel = 3;
 uint8_t gatewayMac[6] = {0xA4, 0xCF, 0x12, 0x25, 0xD9, 0x8C};
 EspNow2MqttClient client = EspNow2MqttClient("tstRq", sharedKey, gatewayMac, sharedChannel);
 
+void blinkBuiltIn()
+{
+  delay(500);
+  digitalWrite(2, HIGH);
+  delay(500);
+  digitalWrite(2, LOW);
+}
+
 void onDataSentUpdateDisplay(bool success)
 {
+  if (success)
+  {
+    blinkBuiltIn();
+  }
   Serial.println(success ? "Sucesso" : "Erro ao entregar");
 }
 
@@ -39,6 +51,8 @@ void setup()
   Serial.begin(115200);
   pinMode(btn0, INPUT_PULLUP);
   pinMode(btn1, INPUT_PULLUP);
+  pinMode(btn2, INPUT_PULLUP);
+  pinMode(2, OUTPUT);
   Serial.println(WiFi.macAddress());
 
   int initcode;
@@ -67,6 +81,8 @@ void sendBtn(char btn)
 {
   // Send message via ESP-NOW
   // Get MAC address for WiFi station
+  Serial.print("Btn ");
+  Serial.println(btn);
   client.doSend(&btn, "45768243");
   delay(200);
 }
@@ -81,8 +97,12 @@ void loop()
   {
     sendBtn('1');
   }
-  if (digitalRead(btn3) < 20)
+  if (digitalRead(btn1) == LOW && digitalRead(btn0) == LOW)
   {
     sendBtn('2');
   }
+  /* if (digitalRead(btn2) == LOW)
+  {
+    sendBtn('2');
+  } */
 }
